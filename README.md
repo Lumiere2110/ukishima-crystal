@@ -2,7 +2,9 @@
 
 夜空に浮かぶ島でクリスタルを集めて、追いかけてくるトゲ玉を避ける3Dアクションゲームです。[Three.js](https://threejs.org/) で作っています。
 
-**遊ぶ:** https://lumiere2110.github.io/ukishima-crystal/
+**ブラウザで遊ぶ:** https://lumiere2110.github.io/ukishima-crystal/
+
+**Windows アプリ版をダウンロード:** [最新版(Releases)](https://github.com/Lumiere2110/ukishima-crystal/releases/latest) から `UkishimaCrystal-win64.zip` をダウンロードし、展開して中の `UkishimaCrystal.exe` をダブルクリックします(インストール不要)。
 
 ## 操作
 
@@ -20,7 +22,7 @@
 
 ファイルは `index.html` 1つだけで、ブラウザで開けばそのまま遊べます。
 
-## Windows アプリとして遊ぶ
+## ソースコードからアプリを動かす
 
 [Electron](https://www.electronjs.org/) でアプリにできます。[Node.js](https://nodejs.org/) を入れてから、次を実行します。
 
