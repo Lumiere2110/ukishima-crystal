@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>浮島クリスタル</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap">
+<style>
+/* Layout: full-screen WebGL stage, HUD pinned to corners, centered overlay card for start / game over */
+:root{
+  --night:#0d1426; --deep:#152042; --glow:#7ef0d8; --ember:#ff6b5a; --gold:#ffd66b; --ink:#e8eefc; --mist:#9aa8cc;
+  --display:"Dela Gothic One","Hiragino Sans","Yu Gothic",sans-serif;
+  --body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic",sans-serif;
+  color-scheme:dark;
+}
+html,body{height:100%;margin:0;overflow:hidden}
+body{background:var(--night);color:var(--ink);font-family:var(--body);-webkit-user-select:none;user-select:none;touch-action:none}
+#stage{position:fixed;inset:0}
+#stage canvas{display:block;width:100%;height:100%}
+.hud{position:fixed;top:calc(env(safe-area-inset-top,0px) + 14px);left:max(16px,env(safe-area-inset-left,0px));right:max(16px,env(safe-area-inset-right,0px));display:flex;justify-content:space-between;align-items:flex-start;gap:12px;pointer-events:none;font-variant-numeric:tabular-nums}
+.stat{display:flex;flex-direction:column;gap:2px}
+.stat small{font-size:11px;letter-spacing:.14em;color:var(--mist)}
+.stat b{font-family:var(--display);font-weight:400;font-size:28px;line-height:1;color:var(--glow);text-shadow:0 0 14px rgba(126,240,216,.45)}
+.lives b{color:var(--ember);text-shadow:0 0 14px rgba(255,107,90,.45);letter-spacing:.1em}
+.right{text-align:right}
+#toast{position:fixed;left:50%;top:22%;transform:translateX(-50%);font-family:var(--display);font-size:clamp(22px,5vw,40px);color:var(--gold);text-shadow:0 0 20px rgba(255,214,107,.6);pointer-events:none;opacity:0;transition:opacity .3s;white-space:nowrap}
+#toast.on{opacity:1}
+.overlay{position:fixed;inset:0;display:grid;place-items:center;background:radial-gradient(ellipse at center,rgba(13,20,38,.55),rgba(13,20,38,.9));padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.card{max-width:440px;width:100%;display:flex;flex-direction:column;gap:16px;text-align:center}
+.card h1{font-family:var(--display);font-weight:400;font-size:clamp(36px,9vw,56px);line-height:1.05;margin:0;color:var(--ink);text-wrap:balance;text-shadow:0 0 30px rgba(126,240,216,.35)}
+.card h1 span{color:var(--glow)}
+.card p{margin:0;line-height:1.8;color:var(--mist)}
+.keys{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;text-align:left;margin:0 auto;font-size:14px}
+.keys kbd{font-family:var(--body);font-weight:700;background:var(--deep);border:1px solid #2a3a6a;border-radius:5px;padding:1px 8px;color:var(--ink);font-size:12px;white-space:nowrap}
+.keys dd{margin:0;color:var(--mist)}
+button.go{font-family:var(--display);font-size:20px;color:var(--night);background:var(--glow);border:0;border-radius:999px;padding:14px 36px;cursor:pointer;justify-self:center;align-self:center;box-shadow:0 0 28px rgba(126,240,216,.5)}
+button.go:hover{background:#a5f7e6}
+button.go:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
+.result{font-family:var(--display);font-size:44px;color:var(--gold);margin:0}
+#touch{position:fixed;inset:0;pointer-events:none}
+#stick{position:fixed;width:120px;height:120px;border-radius:50%;border:2px solid rgba(232,238,252,.25);background:rgba(232,238,252,.05);display:none;pointer-events:none}
+#knob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:rgba(126,240,216,.45)}
+#jumpBtn{position:fixed;right:calc(max(16px,env(safe-area-inset-right,0px)) + 8px);bottom:calc(env(safe-area-inset-bottom,0px) + 28px);width:84px;height:84px;border-radius:50%;border:2px solid rgba(126,240,216,.6);background:rgba(126,240,216,.15);color:var(--ink);font-family:var(--display);font-size:16px;display:none;pointer-events:auto}
+body.touch #jumpBtn{display:block}
+@media (prefers-reduced-motion:reduce){#toast{transition:none}}
+</style>
+</head>
+<body>
+
+<div id="stage"></div>
+
+<div class="hud" id="hud" hidden>
+  <div class="stat"><small>クリスタル</small><b id="score">0</b></div>
+  <div class="stat lives"><small>ライフ</small><b id="lives">♥♥♥</b></div>
+  <div class="stat right"><small>レベル</small><b id="level">1</b></div>
+</div>
+<div id="toast"></div>
+
+<div class="overlay" id="startScreen">
+  <div class="card">
+    <h1>浮島<span>クリスタル</span></h1>
+    <p>夜空に浮かぶ島でクリスタルを集めよう。赤いトゲ玉に当たるか、島から落ちるとライフが減る。5個集めるごとにレベルが上がって、トゲ玉が増えていく。</p>
+    <dl class="keys">
+      <dt><kbd>WASD</kbd> / <kbd>矢印</kbd></dt><dd>移動</dd>
+      <dt><kbd>Space</kbd></dt><dd>ジャンプ(トゲ玉を飛び越えられる)</dd>
+      <dt><kbd>スマホ</kbd></dt><dd>画面左をドラッグで移動、右下ボタンでジャンプ</dd>
+    </dl>
+    <p id="bestLine"></p>
+    <button class="go" id="startBtn">スタート</button>
+  </div>
+</div>
+
+<div class="overlay" id="overScreen" hidden>
+  <div class="card">
+    <h1>ゲーム<span>オーバー</span></h1>
+    <p class="result" id="finalScore">0</p>
+    <p id="finalNote"></p>
+    <button class="go" id="retryBtn">もう一度</button>
+  </div>
+</div>
+
+<div id="touch"><div id="stick"><div id="knob"></div></div></div>
+<button id="jumpBtn" aria-label="ジャンプ">JUMP</button>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(() => {
+const ISLAND_R = 22, PLAYER_R = 0.8, GRAVITY = 32, JUMP_V = 13, SPEED = 11;
+const $ = id => document.getElementById(id);
+
+// ---------- renderer / scene ----------
+const stage = $('stage');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0d1426);
+scene.fog = new THREE.Fog(0x0d1426, 38, 90);
+
+const camera = new THREE.PerspectiveCamera(55, 1, 0.1, 200);
+const CAM_OFFSET = new THREE.Vector3(0, 15, 17);
+
+scene.add(new THREE.HemisphereLight(0x8fb4ff, 0x1a1030, 0.75));
+const sun = new THREE.DirectionalLight(0xfff0d6, 0.9);
+sun.position.set(12, 26, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -28, right: 28, top: 28, bottom: -28, near: 1, far: 70 });
+scene.add(sun);
+
+// stars
+{
+  const g = new THREE.BufferGeometry(), n = 900, p = new Float32Array(n * 3);
+  for (let i = 0; i < n; i++) {
+    const v = new THREE.Vector3().randomDirection ? new THREE.Vector3().randomDirection() :
+      new THREE.Vector3(Math.random()-.5, Math.random()-.5, Math.random()-.5).normalize();
+    v.multiplyScalar(80 + Math.random() * 40);
+    if (v.y < -10) v.y = -v.y;
+    p.set([v.x, v.y, v.z], i * 3);
+  }
+  g.setAttribute('position', new THREE.BufferAttribute(p, 3));
+  scene.add(new THREE.Points(g, new THREE.PointsMaterial({ color: 0xcfe0ff, size: 0.5, fog: false })));
+}
+
+// island: grassy top + rocky cone underneath
+const island = new THREE.Group();
+{
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(ISLAND_R, ISLAND_R, 1.2, 64),
+    new THREE.MeshStandardMaterial({ color: 0x3f8f6a, roughness: 0.9 }));
+  top.position.y = -0.6; top.receiveShadow = true; island.add(top);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(ISLAND_R, 0.18, 8, 96),
+    new THREE.MeshBasicMaterial({ color: 0x7ef0d8 }));
+  rim.rotation.x = Math.PI / 2; rim.position.y = 0.02; island.add(rim);
+  const rock = new THREE.Mesh(new THREE.ConeGeometry(ISLAND_R, 18, 24, 1),
+    new THREE.MeshStandardMaterial({ color: 0x4a3b5c, roughness: 1, flatShading: true }));
+  rock.rotation.x = Math.PI; rock.position.y = -10.2; island.add(rock);
+}
+scene.add(island);
+
+// pillars (obstacles)
+const pillars = [];
+[[8, 6], [-9, 5], [-6, -9], [9, -8], [0, 14], [0, -15]].forEach(([x, z]) => {
+  const r = 1.3, h = 4 + Math.random() * 3;
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 1.15, h, 7),
+    new THREE.MeshStandardMaterial({ color: 0x8a86a8, roughness: 0.8, flatShading: true }));
+  m.position.set(x, h / 2, z); m.castShadow = m.receiveShadow = true;
+  scene.add(m); pillars.push({ x, z, r });
+});
+
+// player
+const player = new THREE.Mesh(new THREE.SphereGeometry(PLAYER_R, 32, 24),
+  new THREE.MeshStandardMaterial({ color: 0x7ef0d8, emissive: 0x1f6f60, roughness: 0.3, metalness: 0.1 }));
+player.castShadow = true;
+const playerLight = new THREE.PointLight(0x7ef0d8, 1.2, 9);
+player.add(playerLight);
+scene.add(player);
+const vel = new THREE.Vector3();
+
+// ---------- game objects ----------
+const crystalGeo = new THREE.OctahedronGeometry(0.6);
+const crystalMat = new THREE.MeshStandardMaterial({ color: 0xffd66b, emissive: 0xa0700a, roughness: 0.2, metalness: 0.3 });
+const enemyGeo = new THREE.IcosahedronGeometry(0.9, 0);
+const spikeGeo = new THREE.ConeGeometry(0.22, 0.7, 5);
+const enemyMat = new THREE.MeshStandardMaterial({ color: 0xff6b5a, emissive: 0x5a0d06, roughness: 0.5, flatShading: true });
+
+let crystals = [], enemies = [], particles = [];
+
+function freeSpot(minDistFromPlayer) {
+  for (let i = 0; i < 50; i++) {
+    const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * (ISLAND_R - 2.5);
+    const x = Math.cos(a) * d, z = Math.sin(a) * d;
+    if (pillars.some(p => Math.hypot(p.x - x, p.z - z) < p.r + 1.5)) continue;
+    if (Math.hypot(player.position.x - x, player.position.z - z) < minDistFromPlayer) continue;
+    return [x, z];
+  }
+  return [0, 0];
+}
+
+function spawnCrystal() {
+  const m = new THREE.Mesh(crystalGeo, crystalMat);
+  const [x, z] = freeSpot(5);
+  m.position.set(x, 1.2, z); m.castShadow = true;
+  scene.add(m); crystals.push(m);
+}
+
+function spawnEnemy() {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(enemyGeo, enemyMat); body.castShadow = true; g.add(body);
+  const pos = enemyGeo.attributes.position, seen = new Set();
+  for (let i = 0; i < pos.count; i++) {
+    const v = new THREE.Vector3().fromBufferAttribute(pos, i), key = v.toArray().map(n => n.toFixed(2)).join();
+    if (seen.has(key)) continue; seen.add(key);
+    const s = new THREE.Mesh(spikeGeo, enemyMat);
+    s.position.copy(v.clone().multiplyScalar(1.05));
+    s.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), v.clone().normalize());
+    g.add(s);
+  }
+  const [x, z] = freeSpot(12);
+  g.position.set(x, 0.9, z);
+  scene.add(g);
+  enemies.push({ mesh: g, vx: 0, vz: 0, wobble: Math.random() * 10 });
+}
+
+function burst(pos, color, count = 18) {
+  for (let i = 0; i < count; i++) {
+    const m = new THREE.Mesh(new THREE.TetrahedronGeometry(0.15), new THREE.MeshBasicMaterial({ color, transparent: true }));
+    m.position.copy(pos);
+    scene.add(m);
+    particles.push({ m, v: new THREE.Vector3((Math.random() - .5) * 10, Math.random() * 9 + 2, (Math.random() - .5) * 10), life: 0.8 });
+  }
+}
+
+// ---------- state ----------
+let state = 'title', score = 0, lives = 3, level = 1, invuln = 0, best = 0;
+try { best = +localStorage.getItem('ukishima-best') || 0; } catch (e) {}
+$('bestLine').textContent = best ? `ベスト記録: ${best} 個` : '';
+
+function clearObjects() {
+  [...crystals, ...enemies.map(e => e.mesh), ...particles.map(p => p.m)].forEach(o => scene.remove(o));
+  crystals = []; enemies = []; particles = [];
+}
+
+function startGame() {
+  clearObjects();
+  score = 0; lives = 3; level = 1; invuln = 0;
+  player.position.set(0, PLAYER_R, 0); vel.set(0, 0, 0);
+  for (let i = 0; i < 3; i++) spawnCrystal();
+  spawnEnemy();
+  updateHud();
+  $('startScreen').hidden = true; $('overScreen').hidden = true; $('hud').hidden = false;
+  state = 'play';
+}
+
+function updateHud() {
+  $('score').textContent = score;
+  $('lives').textContent = '♥'.repeat(Math.max(lives, 0)) || '-';
+  $('level').textContent = level;
+}
+
+let toastTimer;
+function toast(text) {
+  const t = $('toast'); t.textContent = text; t.classList.add('on');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), 1200);
+}
+
+function hurt(reason) {
+  if (invuln > 0) return;
+  lives--; invuln = 2;
+  burst(player.position, 0xff6b5a, 26);
+  updateHud();
+  if (lives <= 0) return gameOver();
+  toast(reason);
+}
+
+function gameOver() {
+  state = 'over';
+  const isBest = score > best;
+  if (isBest) { best = score; try { localStorage.setItem('ukishima-best', String(best)); } catch (e) {} }
+  $('finalScore').textContent = `${score} 個`;
+  $('finalNote').textContent = isBest ? 'ベスト記録更新!' : `ベスト記録: ${best} 個 / 到達レベル ${level}`;
+  $('bestLine').textContent = `ベスト記録: ${best} 個`;
+  $('hud').hidden = true; $('overScreen').hidden = false;
+  $('retryBtn').focus();
+}
+
+// ---------- input ----------
+const keys = {};
+let jumpQueued = false;
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space') { e.preventDefault(); jumpQueued = true; }
+  if ((e.code === 'Enter' || e.code === 'Space') && state !== 'play' && document.activeElement?.tagName !== 'BUTTON') startGame();
+});
+addEventListener('keyup', e => { keys[e.code] = false; });
+$('startBtn').onclick = startGame;
+$('retryBtn').onclick = startGame;
+
+const stick = $('stick'), knob = $('knob');
+let touchId = null, touchOrigin = null, touchVec = { x: 0, y: 0 };
+addEventListener('touchstart', e => {
+  document.body.classList.add('touch');
+  if (state !== 'play') return;
+  for (const t of e.changedTouches) {
+    if (touchId === null && t.clientX < innerWidth * 0.6) {
+      touchId = t.identifier; touchOrigin = { x: t.clientX, y: t.clientY };
+      stick.style.left = (t.clientX - 60) + 'px'; stick.style.top = (t.clientY - 60) + 'px'; stick.style.display = 'block';
+    }
+  }
+}, { passive: true });
+addEventListener('touchmove', e => {
+  for (const t of e.changedTouches) if (t.identifier === touchId) {
+    let dx = t.clientX - touchOrigin.x, dy = t.clientY - touchOrigin.y;
+    const len = Math.hypot(dx, dy), max = 45;
+    if (len > max) { dx *= max / len; dy *= max / len; }
+    touchVec = { x: dx / max, y: dy / max };
+    knob.style.transform = `translate(${dx}px,${dy}px)`;
+  }
+}, { passive: true });
+const endTouch = e => {
+  for (const t of e.changedTouches) if (t.identifier === touchId) {
+    touchId = null; touchVec = { x: 0, y: 0 }; stick.style.display = 'none'; knob.style.transform = '';
+  }
+};
+addEventListener('touchend', endTouch); addEventListener('touchcancel', endTouch);
+$('jumpBtn').addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); jumpQueued = true; });
+
+// ---------- update ----------
+function pushOutOfPillars(pos, r) {
+  for (const p of pillars) {
+    const dx = pos.x - p.x, dz = pos.z - p.z, d = Math.hypot(dx, dz), min = p.r + r;
+    if (d < min && d > 0.0001) { pos.x = p.x + dx / d * min; pos.z = p.z + dz / d * min; return true; }
+  }
+  return false;
+}
+
+function update(dt, t) {
+  // movement input (screen-aligned: up = away from camera = -z)
+  let ix = 0, iz = 0;
+  if (keys.KeyA || keys.ArrowLeft) ix -= 1;
+  if (keys.KeyD || keys.ArrowRight) ix += 1;
+  if (keys.KeyW || keys.ArrowUp) iz -= 1;
+  if (keys.KeyS || keys.ArrowDown) iz += 1;
+  ix += touchVec.x; iz += touchVec.y;
+  const il = Math.hypot(ix, iz); if (il > 1) { ix /= il; iz /= il; }
+
+  const onGround = player.position.y <= PLAYER_R + 0.001 && Math.hypot(player.position.x, player.position.z) <= ISLAND_R;
+  const accel = onGround ? 10 : 3;
+  vel.x += (ix * SPEED - vel.x) * Math.min(1, accel * dt);
+  vel.z += (iz * SPEED - vel.z) * Math.min(1, accel * dt);
+  if (jumpQueued && onGround) vel.y = JUMP_V;
+  jumpQueued = false;
+  vel.y -= GRAVITY * dt;
+
+  player.position.addScaledVector(vel, dt);
+  const onIsland = Math.hypot(player.position.x, player.position.z) <= ISLAND_R;
+  if (onIsland && player.position.y < PLAYER_R && player.position.y > -0.5) { player.position.y = PLAYER_R; vel.y = Math.max(vel.y, 0); }
+  if (player.position.y < 3.5 + PLAYER_R) pushOutOfPillars(player.position, PLAYER_R);
+  // rolling look
+  player.rotation.x += vel.z * dt / PLAYER_R;
+  player.rotation.z -= vel.x * dt / PLAYER_R;
+
+  if (player.position.y < -14) {
+    invuln = 0; hurt('島から落ちた!');
+    if (state !== 'play') return;
+    player.position.set(0, 6, 0); vel.set(0, 0, 0);
+  }
+
+  // crystals
+  for (let i = crystals.length - 1; i >= 0; i--) {
+    const c = crystals[i];
+    c.rotation.y += dt * 2; c.position.y = 1.2 + Math.sin(t * 3 + i) * 0.25;
+    if (c.position.distanceTo(player.position) < PLAYER_R + 0.7) {
+      burst(c.position, 0xffd66b);
+      scene.remove(c); crystals.splice(i, 1);
+      score++;
+      if (score % 5 === 0) { level++; spawnEnemy(); toast(`レベル ${level}!`); }
+      spawnCrystal();
+      updateHud();
+    }
+  }
+
+  // enemies: steer toward player, slight separation
+  const espeed = 3.2 + level * 0.55;
+  enemies.forEach((e, i) => {
+    const m = e.mesh;
+    let dx = player.position.x - m.position.x, dz = player.position.z - m.position.z;
+    const d = Math.hypot(dx, dz) || 1; dx /= d; dz /= d;
+    // wobble so they don't move in a dead straight line
+    const w = Math.sin(t * 1.3 + e.wobble) * 0.5;
+    const sx = dx - dz * w, sz = dz + dx * w;
+    let ax = sx * espeed, az = sz * espeed;
+    enemies.forEach((o, j) => {
+      if (i === j) return;
+      const ox = m.position.x - o.mesh.position.x, oz = m.position.z - o.mesh.position.z, od = Math.hypot(ox, oz);
+      if (od < 2.6 && od > 0.01) { ax += ox / od * 4; az += oz / od * 4; }
+    });
+    e.vx += (ax - e.vx) * Math.min(1, 2 * dt);
+    e.vz += (az - e.vz) * Math.min(1, 2 * dt);
+    m.position.x += e.vx * dt; m.position.z += e.vz * dt;
+    const r = Math.hypot(m.position.x, m.position.z);
+    if (r > ISLAND_R - 1) { m.position.x *= (ISLAND_R - 1) / r; m.position.z *= (ISLAND_R - 1) / r; }
+    pushOutOfPillars(m.position, 0.9);
+    m.rotation.y += dt * 2; m.rotation.x += dt * 1.4;
+
+    const hit = Math.hypot(player.position.x - m.position.x, player.position.z - m.position.z) < PLAYER_R + 0.95
+      && player.position.y < 2.3;
+    if (hit && invuln <= 0) {
+      vel.x = -dx * 14; vel.z = -dz * 14; vel.y = 8;
+      hurt('トゲ玉に当たった!');
+    }
+  });
+
+  if (invuln > 0) {
+    invuln -= dt;
+    player.visible = Math.floor(invuln * 12) % 2 === 0 || invuln <= 0;
+  } else player.visible = true;
+}
+
+function updateParticles(dt) {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.life -= dt; p.v.y -= 20 * dt;
+    p.m.position.addScaledVector(p.v, dt);
+    p.m.rotation.x += dt * 8;
+    p.m.material.opacity = Math.max(0, p.life / 0.8);
+    if (p.life <= 0) { scene.remove(p.m); p.m.geometry.dispose(); p.m.material.dispose(); particles.splice(i, 1); }
+  }
+}
+
+// ---------- loop ----------
+const camTarget = new THREE.Vector3();
+function resize() {
+  const w = innerWidth, h = innerHeight;
+  renderer.setSize(w, h, false);
+  camera.aspect = w / h;
+  // pull the camera back on tall phone screens so the island fits
+  camera.fov = w / h < 0.8 ? 70 : 55;
+  camera.updateProjectionMatrix();
+}
+addEventListener('resize', resize); resize();
+
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now;
+  const t = now / 1000;
+  if (state === 'play') update(dt, t);
+  else { player.position.y = PLAYER_R + Math.abs(Math.sin(t * 2)) * 0.6; }
+  updateParticles(dt);
+  island.rotation.y = 0;
+  // camera follows player, clamped low when falling
+  const focus = state === 'title' ? new THREE.Vector3(0, 0, 0) : player.position;
+  camTarget.set(focus.x * 0.6, Math.max(focus.y, -4) * 0.5, focus.z * 0.6);
+  const desired = camTarget.clone().add(CAM_OFFSET);
+  if (state === 'title') desired.applyAxisAngle(new THREE.Vector3(0, 1, 0), t * 0.15);
+  camera.position.lerp(desired, Math.min(1, 4 * dt));
+  camera.lookAt(camTarget);
+  renderer.render(scene, camera);
+  requestAnimationFrame(frame);
+}
+camera.position.copy(CAM_OFFSET);
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
