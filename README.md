@@ -19,3 +19,14 @@
 - ベスト記録はブラウザに保存されます。
 
 ファイルは `index.html` 1つだけで、ブラウザで開けばそのまま遊べます。
+
+## Windows アプリとして遊ぶ
+
+[Electron](https://www.electronjs.org/) でアプリにできます。[Node.js](https://nodejs.org/) を入れてから、次を実行します。
+
+```bash
+npm install
+npm start
+```
+
+`npm start` でゲームのウィンドウが開きます。three.js は `vendor/three.min.js` に同梱しているので、ネットにつながっていなくても遊べます。
